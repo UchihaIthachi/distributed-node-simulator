@@ -1,7 +1,7 @@
 # Assignment Report
 
 **Approach and Architecture**
-We wrote a basic python simulation for the distributed nodes problem. We used a dataclass to store node properties like x, y, energy, and cluster id. The main simulation runs in a while loop that ticks forward as long as there are nodes alive.
+We wrote a basic python simulation for the distributed nodes problem. We used a simple python class to store node properties like x, y, energy, and cluster id. The main simulation runs in a while loop that ticks forward as long as there are nodes alive.
 
 For the grouping part, we used euclidean distance. The highest energy nodes are picked first, and any node within radius 20 becomes a member of that leader's group. If no one is within 20, the node stays isolated.
 
