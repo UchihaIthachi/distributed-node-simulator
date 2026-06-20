@@ -1,9 +1,6 @@
 import sys
 import os
 
-# allow imports from src/
-sys.path.insert(0, os.path.dirname(__file__))
-
 from parser import parse_input
 from clustering import form_clusters
 from simulation import run
@@ -13,7 +10,7 @@ from logger import init_log
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python src/main.py input/input1.txt")
+        print("Usage: python main.py input/input1.txt")
         sys.exit(1)
 
     input_file = sys.argv[1]
@@ -29,7 +26,6 @@ def main():
 
     init_log(log_path)
 
-    # Keep a copy of all nodes for plotting before simulation removes them
     all_nodes = nodes[:]
 
     run(nodes, log_path, verbose=True)

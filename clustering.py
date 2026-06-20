@@ -9,7 +9,6 @@ def euclidean(a, b):
 
 
 def form_clusters(nodes):
-    # Sort by energy descending so highest-energy nodes get first pick
     sorted_nodes = sorted(nodes, key=lambda n: (-n.energy, n.id))
     assigned = set()
 
