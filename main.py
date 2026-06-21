@@ -2,190 +2,220 @@ import sys
 import math
 import csv
 import re
+import os
 
 RADIUS = 20
 IDLE_COST = 1
 MESSAGE_COST = 2
 
+
 class Node:
-    def __init__(self, id, x, y, energy):
-        self.id = id
+    def __init__(self, node_id, x, y, energy):
+        self.id = node_id
         self.x = x
         self.y = y
         self.energy = energy
-        self.role = ""
-        self.cluster_id = None
-        self.energy_history = []
+        self.role = ""          # "leader", "member", or "isolated"
+        self.cluster_id = None  # matches the leader's id for that cluster
+        self.energy_history = []  # list of (tick, energy) snapshots
 
-def parse_input(filepath):
+
+def load_nodes(filepath):
     with open(filepath, "r") as f:
-        content = f.read()
+        raw = f.read()
 
-    triplets = re.findall(r"\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", content)
+    # expecting triplets like (x, y, energy) anywhere in the file
+    triplets = re.findall(r"\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", raw)
     if not triplets:
-        raise ValueError(f"No valid triplets found in {filepath}")
+        raise ValueError(f"Couldn't find any (x, y, energy) triplets in: {filepath}")
 
-    nodes = []
-    for i, (x, y, energy) in enumerate(triplets, start=1):
-        nodes.append(Node(id=i, x=float(x), y=float(y), energy=int(energy)))
+    node_list = []
+    for idx, (x, y, energy) in enumerate(triplets, start=1):
+        node_list.append(Node(node_id=idx, x=float(x), y=float(y), energy=int(energy)))
 
-    return nodes
+    return node_list
 
 
-def distance(a, b):
+def euclidean(a, b):
     return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
 
 
-def form_clusters(nodes):
-    # highest energy node picks first
+def build_clusters(nodes):
+    # highest-energy node gets to claim its neighbours first
     sorted_nodes = sorted(nodes, key=lambda n: (-n.energy, n.id))
-    assigned = set()
+    taken = set()
 
-    for node in sorted_nodes:
-        if node.id in assigned:
+    for nd in sorted_nodes:
+        if nd.id in taken:
             continue
 
-        neighbours = []
-        for other in nodes:
-            if other.id != node.id and other.id not in assigned and distance(node, other) <= RADIUS:
-                neighbours.append(other)
+        nearby = [
+            other for other in nodes
+            if other.id != nd.id and other.id not in taken and euclidean(nd, other) <= RADIUS
+        ]
 
-        if neighbours:
-            node.role = "leader"
-            node.cluster_id = node.id
-            assigned.add(node.id)
-
-            for member in neighbours:
-                member.role = "member"
-                member.cluster_id = node.id
-                assigned.add(member.id)
+        if nearby:
+            nd.role = "leader"
+            nd.cluster_id = nd.id
+            taken.add(nd.id)
+            for nb in nearby:
+                nb.role = "member"
+                nb.cluster_id = nd.id
+                taken.add(nb.id)
         else:
-            # isolated nodes don't transmit so they aren't marked as leaders
-            node.role = "isolated"
-            node.cluster_id = node.id
-            assigned.add(node.id)
+            # no reachable neighbours
+            nd.role = "isolated"
+            nd.cluster_id = nd.id
+            taken.add(nd.id)
 
     return nodes
 
 
-def elect_new_leader(leader, survivors, events):
-    if not survivors:
-        events.append(f"Cluster {leader.id} has ended")
+def handle_leader_death(dead_leader, cluster_members, events):
+    """
+    When a leader dies we need to pick a replacement from whoever is left.
+    The election costs a round of messaging, so every node in range pays MESSAGE_COST.
+    Nodes too far from the new candidate get dropped to isolated.
+    """
+    if not cluster_members:
+        events.append(f"Cluster {dead_leader.id} has ended")
         return []
 
-    # all survivors broadcast their energy during an election
-    for survivor in survivors:
-        survivor.energy -= MESSAGE_COST
+    # pick the candidate with most energy
+    candidate = max(cluster_members, key=lambda n: (n.energy, -n.id))
 
-    casualties = []
-    alive_survivors = []
+    reachable   = [n for n in cluster_members if euclidean(n, candidate) <= RADIUS]
+    unreachable = [n for n in cluster_members if euclidean(n, candidate) >  RADIUS]
 
-    for node in survivors:
-        if node.energy <= 0:
-            casualties.append(node)
-        else:
-            alive_survivors.append(node)
+    # election broadcast drains everyone in range
+    for n in reachable:
+        n.energy -= MESSAGE_COST
 
-    if not alive_survivors:
-        events.append(f"Cluster {leader.id} ended during election")
-        return casualties
+    # nodes out of range can't participate
+    for n in unreachable:
+        n.cluster_id = n.id
+        n.role = "isolated"
+        events.append(f"Node {n.id} fell out of radius and became isolated")
 
-    new_leader = min(alive_survivors, key=lambda n: (-n.energy, n.id))
-    events.append(f"Node {new_leader.id} became new leader after Node {leader.id} died")
+    # some nodes might have drained to 0 just from the election messages
+    died_in_election = [n for n in reachable if n.energy <= 0]
+    survived = [n for n in reachable if n.energy > 0]
 
-    for survivor in alive_survivors:
-        survivor.cluster_id = new_leader.id
-        if survivor.id == new_leader.id:
-            survivor.role = "leader"
-        else:
-            survivor.role = "member"
+    if not survived:
+        events.append(f"Cluster {dead_leader.id} ended during election")
+        return died_in_election
 
-    return casualties
+    new_leader = max(survived, key=lambda n: (n.energy, -n.id))
+    events.append(f"Node {new_leader.id} became new leader after Node {dead_leader.id} died")
+
+    for n in survived:
+        n.cluster_id = new_leader.id
+        n.role = "leader" if n.id == new_leader.id else "member"
+
+    return died_in_election
+
+
+def try_reintegrate(nodes, events):
+    """
+    After elections settle, give isolated nodes a chance to join a nearby cluster.
+    Only the closest leader within RADIUS is considered.
+    """
+    isolated = [n for n in nodes if n.role == "isolated"]
+    leaders  = [n for n in nodes if n.role == "leader"]
+
+    for nd in isolated:
+        closest_leader = None
+        closest_dist = float("inf")
+        for ldr in leaders:
+            d = euclidean(nd, ldr)
+            if d <= RADIUS and d < closest_dist:
+                closest_dist = d
+                closest_leader = ldr
+
+        if closest_leader is not None:
+            nd.role = "member"
+            nd.cluster_id = closest_leader.id
+            events.append(f"Node {nd.id} re-integrated into cluster {closest_leader.id}")
 
 
 def run_simulation(nodes, log_path, events_path):
     tick = 0
-    death_order = []
+    death_log = []  # (node_id, tick) pairs
 
     while nodes:
         tick += 1
-        events = []
+        tick_events = []
 
-        for node in nodes:
-            node.energy -= IDLE_COST
+        # energy drain phase
+        for nd in nodes:
+            nd.energy -= IDLE_COST
+        for nd in nodes:
+            if nd.role == "leader":
+                nd.energy -= MESSAGE_COST
 
-        for node in nodes:
-            if node.role == "leader":
-                node.energy -= MESSAGE_COST
+        # figure out who died this tick
+        dead_this_tick = [nd for nd in nodes if nd.energy <= 0]
+        nodes = [nd for nd in nodes if nd.energy > 0]
 
-        dead = []
-        alive = []
-        for node in nodes:
-            if node.energy <= 0:
-                dead.append(node)
-            else:
-                alive.append(node)
-        nodes = alive
+        for nd in dead_this_tick:
+            death_log.append((nd.id, tick))
+            tick_events.append(f"Node {nd.id} died (role={nd.role})")
+            nd.energy_history.append((tick, nd.energy))
 
-        for node in dead:
-            death_order.append((node.id, tick))
-            events.append(f"Node {node.id} died (role={node.role})")
-            node.energy_history.append((tick, node.energy))
+        # re-elect leaders where needed
+        dead_leaders = [nd for nd in dead_this_tick if nd.role == "leader"]
+        election_casualties = []
 
-        dead_leaders = []
-        for n in dead:
-            if n.role == "leader":
-                dead_leaders.append(n)
+        for ldr in dead_leaders:
+            orphans = [nd for nd in nodes if nd.cluster_id == ldr.id]
+            extra_dead = handle_leader_death(ldr, orphans, tick_events)
+            election_casualties.extend(extra_dead)
 
-        for leader in dead_leaders:
-            survivors = []
-            for node in nodes:
-                if node.cluster_id == leader.id:
-                    survivors.append(node)
-            casualties = elect_new_leader(leader, survivors, events)
-            
-            alive_after_election = []
-            for node in nodes:
-                if node.energy > 0:
-                    alive_after_election.append(node)
-            nodes = alive_after_election
-            
-            for node in casualties:
-                death_order.append((node.id, tick))
-                events.append(f"Node {node.id} died during election")
-                node.energy_history.append((tick, node.energy))
+        casualty_ids = {nd.id for nd in election_casualties}
+        nodes = [nd for nd in nodes if nd.id not in casualty_ids]
 
-        for node in nodes:
-            node.energy_history.append((tick, node.energy))
+        for nd in election_casualties:
+            death_log.append((nd.id, tick))
+            tick_events.append(f"Node {nd.id} died during election")
+            nd.energy_history.append((tick, nd.energy))
 
-        write_log(log_path, tick, nodes)
+        # isolated nodes check if they can rejoin
+        try_reintegrate(nodes, tick_events)
+
+        # snapshot energy for everyone still alive
+        for nd in nodes:
+            nd.energy_history.append((tick, nd.energy))
+
+        write_tick_to_csv(log_path, tick, nodes + dead_this_tick + election_casualties)
         with open(events_path, "a") as ef:
-            for e in events:
-                ef.write(f"Tick {tick}: {e}\n")
+            for evt in tick_events:
+                ef.write(f"Tick {tick}: {evt}\n")
 
         print(f"\n── Tick {tick} ──────────────────────────────")
-        for node in sorted(nodes, key=lambda x: x.id):
-            print(f"  Node {node.id:2d} | energy={node.energy:4d} | {node.role:<9} | cluster={node.cluster_id}")
-        for e in events:
-            print(f"  [event] {e}")
+        for nd in sorted(nodes, key=lambda x: x.id):
+            print(f"  Node {nd.id:2d} | energy={nd.energy:4d} | {nd.role:<9} | cluster={nd.cluster_id}")
+        for evt in tick_events:
+            print(f"  [event] {evt}")
 
     print("\n══ Simulation ended ══════════════════════════")
     print(f"  Total ticks: {tick}")
     print("  Node death order:")
-    for node_id, t in sorted(death_order, key=lambda x: x[1]):
-        print(f"    Node {node_id} died at tick {t}")
+    for nid, t in sorted(death_log, key=lambda x: x[1]):
+        print(f"    Node {nid} died at tick {t}")
 
-    return tick, death_order
+    return tick, death_log
 
 
-def write_log(filepath, tick, nodes):
+def write_tick_to_csv(filepath, tick, nodes):
     with open(filepath, "a", newline="") as f:
         writer = csv.writer(f)
-        for node in nodes:
-            writer.writerow([tick, node.id, node.x, node.y, node.energy, node.role, node.cluster_id])
+        for nd in nodes:
+            # clamp to 0 so we don't write negative energy into the CSV
+            logged_energy = max(nd.energy, 0)
+            writer.writerow([tick, nd.id, nd.x, nd.y, logged_energy, nd.role, nd.cluster_id])
 
 
-def plot_energy(all_nodes, output_path):
+def save_energy_plot(all_nodes, out_path):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
@@ -193,46 +223,52 @@ def plot_energy(all_nodes, output_path):
         return
 
     plt.figure(figsize=(10, 5))
-    for node in all_nodes:
-        if node.energy_history:
-            ticks = []
-            energies = []
-            for t, e in node.energy_history:
-                ticks.append(t)
-                energies.append(e)
-            plt.plot(ticks, energies, label=f"Node {node.id}")
+    for nd in all_nodes:
+        if not nd.energy_history:
+            continue
+        ticks    = [t for t, _ in nd.energy_history]
+        energies = [e for _, e in nd.energy_history]
+        plt.plot(ticks, energies, label=f"Node {nd.id}")
 
     plt.xlabel("Tick")
     plt.ylabel("Energy")
     plt.title("Node energy over time")
     plt.legend(fontsize=7)
     plt.tight_layout()
-    plt.savefig(output_path)
-    print(f"Energy plot saved to {output_path}")
+    plt.savefig(out_path)
+    print(f"Energy plot saved to {out_path}")
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python main.py input1.txt")
+        print("Usage: python main.py inputs/input1.txt")
         sys.exit(1)
 
     input_file = sys.argv[1]
-    log_path = "simulation_log.csv"
-    events_path = "events_log.txt"
-    plot_path = "energy_plot.png"
 
-    nodes = parse_input(input_file)
+    # mirror the input filename in the output folder name so results are easy to find
+    base_name  = os.path.splitext(os.path.basename(input_file))[0]
+    output_dir = os.path.join("outputs", f"outputs_of_{base_name}")
+    os.makedirs(output_dir, exist_ok=True)
+
+    log_path    = os.path.join(output_dir, "simulation_log.csv")
+    events_path = os.path.join(output_dir, "events_log.txt")
+    plot_path   = os.path.join(output_dir, "energy_plot.png")
+
+    nodes = load_nodes(input_file)
     print(f"Loaded {len(nodes)} nodes from {input_file}")
 
-    form_clusters(nodes)
+    build_clusters(nodes)
 
-    for node in nodes:
-        node.energy_history.append((0, node.energy))
+    # tick 0 snapshot before any energy is consumed
+    for nd in nodes:
+        nd.energy_history.append((0, nd.energy))
 
     print("\nInitial cluster assignment:")
-    for node in sorted(nodes, key=lambda x: x.id):
-        print(f"  Node {node.id:2d} | energy={node.energy:4d} | {node.role:<9} | cluster={node.cluster_id}")
+    for nd in sorted(nodes, key=lambda x: x.id):
+        print(f"  Node {nd.id:2d} | energy={nd.energy:4d} | {nd.role:<9} | cluster={nd.cluster_id}")
 
+    # initialise output files
     with open(events_path, "w") as ef:
         ef.write("Simulation Events\n")
         ef.write("Tick 0: Initial clusters formed\n")
@@ -241,13 +277,14 @@ def main():
         writer = csv.writer(f)
         writer.writerow(["tick", "node_id", "x", "y", "energy", "role", "cluster_id"])
 
-    write_log(log_path, 0, nodes)  # log the initial state right after clustering
+    write_tick_to_csv(log_path, 0, nodes)
 
-    all_nodes = nodes[:]  # keep a copy of everyone to plot later even if they die
+    # keep a full roster for the energy plot
+    all_nodes = nodes[:]
 
     run_simulation(nodes, log_path, events_path)
 
-    plot_energy(all_nodes, output_path=plot_path)
+    save_energy_plot(all_nodes, out_path=plot_path)
     print(f"\nCSV log saved to {log_path}")
     print(f"Events log saved to {events_path}")
 

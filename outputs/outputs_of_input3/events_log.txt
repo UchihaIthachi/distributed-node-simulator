@@ -1,0 +1,22 @@
+Simulation Events
+Tick 0: Initial clusters formed
+Tick 2: Node 12 died (role=leader)
+Tick 2: Node 11 became new leader after Node 12 died
+Tick 3: Node 11 died (role=leader)
+Tick 3: Cluster 11 has ended
+Tick 8: Node 5 died (role=member)
+Tick 10: Node 2 died (role=member)
+Tick 12: Node 4 died (role=member)
+Tick 15: Node 3 died (role=member)
+Tick 167: Node 6 died (role=leader)
+Tick 167: Node 7 became new leader after Node 6 died
+Tick 274: Node 7 died (role=leader)
+Tick 274: Node 8 became new leader after Node 7 died
+Tick 334: Node 1 died (role=leader)
+Tick 334: Cluster 1 has ended
+Tick 342: Node 8 died (role=leader)
+Tick 342: Node 9 became new leader after Node 8 died
+Tick 380: Node 9 died (role=leader)
+Tick 380: Node 10 became new leader after Node 9 died
+Tick 398: Node 10 died (role=leader)
+Tick 398: Cluster 10 has ended
