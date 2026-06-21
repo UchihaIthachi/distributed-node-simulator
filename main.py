@@ -171,16 +171,13 @@ def run_simulation(nodes, log_path, events_path):
             casualties = elect_new_leader(leader, survivors, events)
             all_casualties.extend(casualties)
 
-            alive_after_election = []
-            for node in nodes:
-                if node.energy > 0:
-                    alive_after_election.append(node)
-            nodes = alive_after_election
+        casualty_ids = {node.id for node in all_casualties}
+        nodes = [node for node in nodes if node.id not in casualty_ids]
 
-            for node in casualties:
-                death_order.append((node.id, tick))
-                events.append(f"Node {node.id} died during election")
-                node.energy_history.append((tick, node.energy))
+        for node in all_casualties:
+            death_order.append((node.id, tick))
+            events.append(f"Node {node.id} died during election")
+            node.energy_history.append((tick, node.energy))
 
         reintegrate_isolated(nodes, events)
 
