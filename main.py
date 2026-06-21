@@ -74,37 +74,38 @@ def elect_new_leader(leader, survivors, events):
         events.append(f"Cluster {leader.id} has ended")
         return []
 
-    # all survivors broadcast their energy during an election
-    for survivor in survivors:
-        survivor.energy -= MESSAGE_COST
+    new_leader = max(survivors, key=lambda n: (n.energy, -n.id))
+    events.append(f"Node {new_leader.id} became new leader after Node {leader.id} died")
+
+    in_radius = [n for n in survivors if distance(n, new_leader) <= RADIUS]
+    out_of_radius = [n for n in survivors if distance(n, new_leader) > RADIUS]
+
+    for node in in_radius:
+        node.energy -= MESSAGE_COST
+
+    for node in out_of_radius:
+        node.cluster_id = node.id
+        node.role = "isolated"
+        events.append(f"Node {node.id} fell out of radius and became isolated")
 
     casualties = []
-    alive_survivors = []
-
-    for node in survivors:
+    alive_in_radius = []
+    for node in in_radius:
         if node.energy <= 0:
             casualties.append(node)
         else:
-            alive_survivors.append(node)
+            alive_in_radius.append(node)
 
-    if not alive_survivors:
+    if not alive_in_radius:
         events.append(f"Cluster {leader.id} ended during election")
         return casualties
 
-    new_leader = min(alive_survivors, key=lambda n: (-n.energy, n.id))
-    events.append(f"Node {new_leader.id} became new leader after Node {leader.id} died")
-
-    for survivor in alive_survivors:
-        if distance(survivor, new_leader) <= RADIUS:
-            survivor.cluster_id = new_leader.id
-            if survivor.id == new_leader.id:
-                survivor.role = "leader"
-            else:
-                survivor.role = "member"
+    for node in alive_in_radius:
+        node.cluster_id = new_leader.id
+        if node.id == new_leader.id:
+            node.role = "leader"
         else:
-            survivor.cluster_id = survivor.id
-            survivor.role = "isolated"
-            events.append(f"Node {survivor.id} fell out of radius and became isolated")
+            node.role = "member"
 
     return casualties
 
@@ -209,7 +210,8 @@ def write_log(filepath, tick, nodes):
     with open(filepath, "a", newline="") as f:
         writer = csv.writer(f)
         for node in nodes:
-            writer.writerow([tick, node.id, node.x, node.y, node.energy, node.role, node.cluster_id])
+            logged_energy = max(node.energy, 0)
+            writer.writerow([tick, node.id, node.x, node.y, logged_energy, node.role, node.cluster_id])
 
 
 def plot_energy(all_nodes, output_path):
