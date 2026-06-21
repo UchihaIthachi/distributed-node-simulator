@@ -74,11 +74,10 @@ def elect_new_leader(leader, survivors, events):
         events.append(f"Cluster {leader.id} has ended")
         return []
 
-    new_leader = max(survivors, key=lambda n: (n.energy, -n.id))
-    events.append(f"Node {new_leader.id} became new leader after Node {leader.id} died")
+    provisional = max(survivors, key=lambda n: (n.energy, -n.id))
 
-    in_radius = [n for n in survivors if distance(n, new_leader) <= RADIUS]
-    out_of_radius = [n for n in survivors if distance(n, new_leader) > RADIUS]
+    in_radius = [n for n in survivors if distance(n, provisional) <= RADIUS]
+    out_of_radius = [n for n in survivors if distance(n, provisional) > RADIUS]
 
     for node in in_radius:
         node.energy -= MESSAGE_COST
@@ -100,9 +99,18 @@ def elect_new_leader(leader, survivors, events):
         events.append(f"Cluster {leader.id} ended during election")
         return casualties
 
+    confirmed_leader = max(alive_in_radius, key=lambda n: (n.energy, -n.id))
+    if confirmed_leader.id != provisional.id:
+        events.append(
+            f"Node {provisional.id} died during election; "
+            f"Node {confirmed_leader.id} became new leader after Node {leader.id} died"
+        )
+    else:
+        events.append(f"Node {confirmed_leader.id} became new leader after Node {leader.id} died")
+
     for node in alive_in_radius:
-        node.cluster_id = new_leader.id
-        if node.id == new_leader.id:
+        node.cluster_id = confirmed_leader.id
+        if node.id == confirmed_leader.id:
             node.role = "leader"
         else:
             node.role = "member"
