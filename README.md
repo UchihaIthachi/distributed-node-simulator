@@ -11,7 +11,11 @@ pip install -r requirements.txt
 
 Then run the simulation with the input file:
 ```bash
-python main.py input1.txt
+python main.py [path_to_input_file]
+```
+eg :
+```bash
+python main.py input/input1.txt
 ```
 
 This will create files:
