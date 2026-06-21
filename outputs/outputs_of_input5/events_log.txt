@@ -1,0 +1,11 @@
+Simulation Events
+Tick 0: Initial clusters formed
+Tick 40: Node 3 died (role=member)
+Tick 45: Node 5 died (role=member)
+Tick 50: Node 2 died (role=member)
+Tick 55: Node 6 died (role=member)
+Tick 60: Node 4 died (role=member)
+Tick 65: Node 8 died (role=member)
+Tick 70: Node 7 died (role=member)
+Tick 334: Node 1 died (role=leader)
+Tick 334: Cluster 1 has ended
