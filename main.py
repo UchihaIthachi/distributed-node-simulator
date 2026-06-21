@@ -100,13 +100,7 @@ def elect_new_leader(leader, survivors, events):
         return casualties
 
     confirmed_leader = max(alive_in_radius, key=lambda n: (n.energy, -n.id))
-    if confirmed_leader.id != provisional.id:
-        events.append(
-            f"Node {provisional.id} died during election; "
-            f"Node {confirmed_leader.id} became new leader after Node {leader.id} died"
-        )
-    else:
-        events.append(f"Node {confirmed_leader.id} became new leader after Node {leader.id} died")
+    events.append(f"Node {confirmed_leader.id} became new leader after Node {leader.id} died")
 
     for node in alive_in_radius:
         node.cluster_id = confirmed_leader.id
