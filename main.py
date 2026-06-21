@@ -109,6 +109,25 @@ def elect_new_leader(leader, survivors, events):
     return casualties
 
 
+def reintegrate_isolated(nodes, events):
+    isolated_nodes = [n for n in nodes if n.role == "isolated"]
+    leaders = [n for n in nodes if n.role == "leader"]
+
+    for node in isolated_nodes:
+        best_leader = None
+        best_dist = float("inf")
+        for leader in leaders:
+            d = distance(node, leader)
+            if d <= RADIUS and d < best_dist:
+                best_dist = d
+                best_leader = leader
+
+        if best_leader is not None:
+            node.role = "member"
+            node.cluster_id = best_leader.id
+            events.append(f"Node {node.id} re-integrated into cluster {best_leader.id}")
+
+
 def run_simulation(nodes, log_path, events_path):
     tick = 0
     death_order = []
@@ -151,17 +170,19 @@ def run_simulation(nodes, log_path, events_path):
                     survivors.append(node)
             casualties = elect_new_leader(leader, survivors, events)
             all_casualties.extend(casualties)
-            
+
             alive_after_election = []
             for node in nodes:
                 if node.energy > 0:
                     alive_after_election.append(node)
             nodes = alive_after_election
-            
+
             for node in casualties:
                 death_order.append((node.id, tick))
                 events.append(f"Node {node.id} died during election")
                 node.energy_history.append((tick, node.energy))
+
+        reintegrate_isolated(nodes, events)
 
         for node in nodes:
             node.energy_history.append((tick, node.energy))
@@ -226,12 +247,12 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    
+
     input_filename = os.path.basename(input_file)
     input_name_without_ext = os.path.splitext(input_filename)[0]
     output_dir = os.path.join("outputs", f"outputs_of_{input_name_without_ext}")
     os.makedirs(output_dir, exist_ok=True)
-    
+
     log_path = os.path.join(output_dir, "simulation_log.csv")
     events_path = os.path.join(output_dir, "events_log.txt")
     plot_path = os.path.join(output_dir, "energy_plot.png")
