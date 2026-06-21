@@ -2,6 +2,7 @@ import sys
 import math
 import csv
 import re
+import os
 
 RADIUS = 20
 IDLE_COST = 1
@@ -94,11 +95,16 @@ def elect_new_leader(leader, survivors, events):
     events.append(f"Node {new_leader.id} became new leader after Node {leader.id} died")
 
     for survivor in alive_survivors:
-        survivor.cluster_id = new_leader.id
-        if survivor.id == new_leader.id:
-            survivor.role = "leader"
+        if distance(survivor, new_leader) <= RADIUS:
+            survivor.cluster_id = new_leader.id
+            if survivor.id == new_leader.id:
+                survivor.role = "leader"
+            else:
+                survivor.role = "member"
         else:
-            survivor.role = "member"
+            survivor.cluster_id = survivor.id
+            survivor.role = "isolated"
+            events.append(f"Node {survivor.id} fell out of radius and became isolated")
 
     return casualties
 
@@ -137,12 +143,14 @@ def run_simulation(nodes, log_path, events_path):
             if n.role == "leader":
                 dead_leaders.append(n)
 
+        all_casualties = []
         for leader in dead_leaders:
             survivors = []
             for node in nodes:
                 if node.cluster_id == leader.id:
                     survivors.append(node)
             casualties = elect_new_leader(leader, survivors, events)
+            all_casualties.extend(casualties)
             
             alive_after_election = []
             for node in nodes:
@@ -158,7 +166,8 @@ def run_simulation(nodes, log_path, events_path):
         for node in nodes:
             node.energy_history.append((tick, node.energy))
 
-        write_log(log_path, tick, nodes)
+        nodes_to_log = nodes + dead + all_casualties
+        write_log(log_path, tick, nodes_to_log)
         with open(events_path, "a") as ef:
             for e in events:
                 ef.write(f"Tick {tick}: {e}\n")
@@ -217,9 +226,10 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    log_path = "simulation_log.csv"
-    events_path = "events_log.txt"
-    plot_path = "energy_plot.png"
+    os.makedirs("output", exist_ok=True)
+    log_path = os.path.join("output", "simulation_log.csv")
+    events_path = os.path.join("output", "events_log.txt")
+    plot_path = os.path.join("output", "energy_plot.png")
 
     nodes = parse_input(input_file)
     print(f"Loaded {len(nodes)} nodes from {input_file}")
