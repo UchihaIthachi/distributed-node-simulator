@@ -226,10 +226,15 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    os.makedirs("output", exist_ok=True)
-    log_path = os.path.join("output", "simulation_log.csv")
-    events_path = os.path.join("output", "events_log.txt")
-    plot_path = os.path.join("output", "energy_plot.png")
+    
+    input_filename = os.path.basename(input_file)
+    input_name_without_ext = os.path.splitext(input_filename)[0]
+    output_dir = os.path.join("output", f"outputs_of_{input_name_without_ext}")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    log_path = os.path.join(output_dir, "simulation_log.csv")
+    events_path = os.path.join(output_dir, "events_log.txt")
+    plot_path = os.path.join(output_dir, "energy_plot.png")
 
     nodes = parse_input(input_file)
     print(f"Loaded {len(nodes)} nodes from {input_file}")
