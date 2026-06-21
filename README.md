@@ -15,10 +15,10 @@ python main.py [path_to_input_file]
 ```
 eg :
 ```bash
-python main.py input/input1.txt
+python main.py inputs/input1.txt
 ```
 
-This will create a new folder inside the `output/` directory named after your input file (for example, `output/outputs_of_input1/`) containing the following files:
+This will create a new folder inside the `outputs/` directory named after your input file (for example, `outputs/outputs_of_input1/`) containing the following files:
 - `simulation_log.csv`: A log of every node's status at every tick.
 - `energy_plot.png`: A graph showing the energy drop over time.
 - `events_log.txt`: A log of all major actions (like nodes dying or new leaders being elected).

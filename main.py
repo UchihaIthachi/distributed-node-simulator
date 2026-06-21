@@ -222,14 +222,14 @@ def plot_energy(all_nodes, output_path):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python main.py input1.txt")
+        print("Usage: python main.py inputs/input1.txt")
         sys.exit(1)
 
     input_file = sys.argv[1]
     
     input_filename = os.path.basename(input_file)
     input_name_without_ext = os.path.splitext(input_filename)[0]
-    output_dir = os.path.join("output", f"outputs_of_{input_name_without_ext}")
+    output_dir = os.path.join("outputs", f"outputs_of_{input_name_without_ext}")
     os.makedirs(output_dir, exist_ok=True)
     
     log_path = os.path.join(output_dir, "simulation_log.csv")
