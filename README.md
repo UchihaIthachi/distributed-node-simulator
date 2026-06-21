@@ -1,10 +1,8 @@
-# Distributed Node Simulator
-
-This program simulates a group of nodes with limited energy. Nodes are grouped around leaders, and the simulation runs tick by tick until all nodes die.
+# CS42623 Distributed Systems Project: 210167E-210339J
 
 ## How to run
 
-First, install the requirements (for the plot graph):
+First, install the requirements:
 ```bash
 pip install -r requirements.txt
 ```
@@ -18,16 +16,16 @@ eg:
 python main.py inputs/input1.txt
 ```
 
-This will create a new folder inside the `outputs/` directory named after your input file (for example, `outputs/outputs_of_input1/`) containing the following files:
+This will create a new folder inside the `outputs/` directory named after the input file (eg: `outputs/outputs_of_input1/`) containing the following files:
 - `simulation_log.csv`: A log of every node's status (energy, role, cluster) at every tick. Energy is clamped to 0 for dead nodes.
+- `events_log.txt`: A log of all major actions, node deaths, leader elections, radius evictions, and re-integrations.
 - `energy_plot.png`: A graph showing the energy drop over time for all nodes.
-- `events_log.txt`: A log of all major actions — node deaths, leader elections, radius evictions, and re-integrations.
 
 Actions are also printed to the console while it runs.
 
 ## Inputs
 
-The input file should have points like this: `(x, y, energy), (x, y, energy)`. See the `inputs/` directory for examples.
+The input file should have points like this: `(x, y, energy), (x, y, energy)`. `inputs/` directory contains the inputs.
 
 ## Energy model
 

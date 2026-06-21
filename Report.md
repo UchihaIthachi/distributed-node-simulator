@@ -1,4 +1,4 @@
-# Assignment Report — Distributed Node Simulator
+# Assignment Report
 **CS42623 Distributed Systems | 2021 Batch Semester 8 | University of Moratuwa**
 
 ---
